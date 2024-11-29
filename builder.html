@@ -1,0 +1,397 @@
+<div id="editor-container">
+  <!-- Highlighter -->
+  <div id="highlighter" style="pointer-events: none;"></div>
+
+  <!-- Popup -->
+  <div id="popup" style="display: none; width: 320px;">
+    <button id="close-popup" style="position: absolute; top: 5px; right: 5px;">X</button>
+    <div id="classname-container" style="margin-bottom: 10px;"></div>
+    <div id="new-class-input-container" style="margin-top: 10px;">
+      <input id="new-class-input" type="text" placeholder="Enter class(es) separated by space" />
+    </div>
+    <button id="finish-editing" style="margin-top: 10px;">Finish Editing</button>
+  </div>
+
+  <style>
+    #classname-container div {
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+
+    #classname-container span {
+      cursor: pointer;
+      transition: background-color 0.2s ease, color 0.2s ease;
+      padding: 2px 4px;
+    }
+
+    #classname-container span:hover {
+      background-color: #f0f0f0; /* Light gray background */
+      color: #007bff; /* Blue text */
+      border-radius: 4px;
+    }
+
+    #classname-container .remove-class-btn {
+      margin-left: 10px;
+      cursor: pointer;
+    }
+
+    #popup {
+      position: absolute;
+      padding: 20px;
+      background-color: white;
+      border: 1px solid black;
+      box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+      z-index: 10000;
+      width: 320px; /* Updated width */
+    }
+
+    #popup #close-popup,
+    #popup .remove-class-btn {
+      padding: 5px;
+      font-size: 12px;
+    }
+
+    #new-class-input-container {
+      margin-top: 10px;
+    }
+
+    #new-class-input {
+      width: 100%;
+      padding: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+  </style>
+
+  <script>
+    /* Highlighter setup */
+    const highlighter = document.getElementById('highlighter');
+    highlighter.style.position = 'absolute';
+    highlighter.style.border = '2px solid red';
+    highlighter.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
+    highlighter.style.zIndex = '9999';
+    highlighter.style.display = 'none';
+    highlighter.style.pointerEvents = 'none';
+
+    /* Popup setup */
+    const popup = document.getElementById('popup');
+    popup.style.position = 'absolute';
+    popup.style.padding = '20px'; /* 20px padding */
+    popup.style.backgroundColor = 'white';
+    popup.style.border = '1px solid black';
+    popup.style.boxShadow = '0px 4px 8px rgba(0, 0, 0, 0.2)';
+    popup.style.zIndex = '10000';
+
+    let lastClickedElement = null;
+
+    /* Function to add a class to the popup */
+    function addClassToPopup(className) {
+      const classContainer = document.getElementById('classname-container');
+      const existingClassDiv = Array.from(classContainer.children).find(
+        (child) => child.querySelector('span')?.textContent === className
+      );
+
+      if (!existingClassDiv) {
+        const classDiv = document.createElement('div');
+        const classSpan = document.createElement('span');
+        classSpan.textContent = className;
+        classSpan.style.cursor = 'pointer';
+
+        /* Add edit functionality */
+        classSpan.addEventListener('click', () => {
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.value = classSpan.textContent;
+          input.style.marginRight = '10px';
+
+          /* Save original classname */
+          const originalClassName = classSpan.textContent;
+
+          /* Hide remove button during edit */
+          const removeBtn = classDiv.querySelector('.remove-class-btn');
+          if (removeBtn) removeBtn.style.display = 'none';
+
+          /* Replace span with input */
+          classSpan.replaceWith(input);
+          input.focus();
+
+          let escapePressed = false; /* Track if Escape was pressed */
+
+          /* Function to save changes */
+          const saveChanges = () => {
+            if (escapePressed) {
+              /* Revert to original classname */
+              input.replaceWith(classSpan);
+              if (removeBtn) removeBtn.style.display = 'inline'; /* Restore remove button */
+              return;
+            }
+
+            const newClassName = input.value.trim();
+
+            /* Check if the classname already exists */
+            const classContainer = document.getElementById('classname-container');
+            const isDuplicate = Array.from(classContainer.querySelectorAll('span')).some(
+              (span) => span.textContent === newClassName && span.textContent !== originalClassName
+            );
+
+            if (isDuplicate) {
+              alert('The classname is already in the list.');
+              input.value = originalClassName; /* Reset to the original value */
+              input.focus();
+              return;
+            }
+
+            if (newClassName && newClassName !== originalClassName) {
+              /* Update classname in the container */
+              classSpan.textContent = newClassName;
+              input.replaceWith(classSpan);
+
+              /* Sync all classnames */
+              syncClassesToElement();
+            } else {
+              input.replaceWith(classSpan); /* No changes made */
+            }
+
+            if (removeBtn) removeBtn.style.display = 'inline'; /* Restore remove button */
+
+            /* Clean up event listeners */
+            input.removeEventListener('keypress', handleKeyPress);
+            input.removeEventListener('keydown', handleEscapeKey);
+            input.removeEventListener('blur', handleBlur);
+          };
+
+          /* Handle Enter key to save changes */
+          const handleKeyPress = (event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              escapePressed = false;
+              saveChanges();
+            }
+          };
+
+          /* Handle Escape key to cancel changes */
+          const handleEscapeKey = (event) => {
+            if (event.key === 'Escape') {
+              escapePressed = true;
+              input.blur(); /* Trigger blur to cleanup */
+            }
+          };
+
+          /* Handle blur (focus loss) */
+          const handleBlur = () => {
+            saveChanges();
+          };
+
+          input.addEventListener('keypress', handleKeyPress);
+          input.addEventListener('keydown', handleEscapeKey); /* Added escape key handler */
+          input.addEventListener('blur', handleBlur);
+        });
+
+        /* Remove button */
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = 'x';
+        removeBtn.className = 'remove-class-btn'; /* Add a class for identification */
+        removeBtn.addEventListener('click', () => {
+          classDiv.remove();
+          syncClassesToElement(); /* Sync after removing the classname */
+        });
+
+        classDiv.appendChild(classSpan);
+        classDiv.appendChild(removeBtn);
+        classContainer.appendChild(classDiv);
+      }
+    }
+
+    /* Function to sync classname-container with the element */
+    function syncClassesToElement() {
+      const classContainer = document.getElementById('classname-container');
+      const classNames = Array.from(classContainer.querySelectorAll('span')).map((span) => span.textContent);
+
+      if (lastClickedElement) {
+        /* Clear all existing classes */
+        lastClickedElement.className = '';
+
+        /* Add updated classnames */
+        classNames.forEach((className) => lastClickedElement.classList.add(className));
+      }
+    }
+
+    /* Add new classes via input */
+    const newClassInput = document.getElementById('new-class-input');
+    newClassInput.addEventListener('keypress', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+
+        /* Split input by spaces */
+        const classNames = newClassInput.value.trim().split(/\s+/);
+        classNames.forEach((className) => {
+          if (className) {
+            addClassToPopup(className);
+          }
+        });
+
+        /* Sync classes with the DOM element */
+        syncClassesToElement();
+
+        /* Clear input field */
+        newClassInput.value = '';
+      }
+    });
+
+    /* Highlighter mouse tracking */
+    document.addEventListener('mousemove', (e) => {
+      if (popup.style.display === 'block') return;
+
+      const element = document.elementFromPoint(e.clientX, e.clientY);
+      if (element && element !== highlighter) {
+        const rect = element.getBoundingClientRect();
+        highlighter.style.display = 'block';
+        highlighter.style.top = `${rect.top + window.scrollY}px`;
+        highlighter.style.left = `${rect.left + window.scrollX}px`;
+        highlighter.style.width = `${rect.width}px`;
+        highlighter.style.height = `${rect.height}px`;
+      }
+    });
+
+    /* Show popup */
+    document.addEventListener('click', (e) => {
+      e.preventDefault();
+
+      const element = document.elementFromPoint(e.clientX, e.clientY);
+      if (element === highlighter || popup.contains(element)) return;
+
+      lastClickedElement = element;
+
+      /* Populate classname-container */
+      const classContainer = document.getElementById('classname-container');
+      classContainer.innerHTML = '';
+      if (lastClickedElement.classList.length > 0) {
+        Array.from(lastClickedElement.classList).forEach((className) => {
+          addClassToPopup(className);
+        });
+      }
+
+      /* Position popup */
+      const popupWidth = 320; /* Updated width */
+      const popupHeight = 150;
+      let left = e.clientX;
+      let top = e.clientY;
+
+      if (left + popupWidth > window.innerWidth) left = window.innerWidth - popupWidth;
+      if (top + popupHeight > window.innerHeight) top = window.innerHeight - popupHeight;
+
+      popup.style.left = `${left}px`;
+      popup.style.top = `${top}px`;
+      popup.style.display = 'block';
+
+      highlighter.style.display = 'none';
+    });
+
+    /* Close popup */
+    document.getElementById('close-popup').addEventListener('click', (e) => {
+      e.stopPropagation();
+      popup.style.display = 'none';
+      highlighter.style.display = 'block';
+    });
+
+    /* Finish editing */
+    document.getElementById('finish-editing').addEventListener('click', () => {
+      if (confirm('Are you sure you want to finish editing?')) {
+        const editorContainer = document.getElementById('editor-container');
+        if (editorContainer) {
+          editorContainer.remove();
+        }
+      }
+    });
+  </script>
+
+
+
+
+
+<!-- DRAG AND DROP FUNCTIONALITY (OPTIONAL ADDON) -->
+<!-- ===========================================  -->
+<!-- ===========================================  -->
+<script>
+  /** Enable dragging for the popup */
+  document.addEventListener("DOMContentLoaded", () => {
+    const popup = document.getElementById("popup");
+    popup.classList.add("draggable"); /** Add a class for identifying draggable popups */
+
+    let isDragging = false;
+    let startX = 0, startY = 0; /** Mouse starting position */
+    let popupStartX = 0, popupStartY = 0; /** Popup's initial position */
+    const adminBarHeight = document.getElementById("wpadminbar")?.offsetHeight || 0; /** Height of the WordPress admin bar */
+
+    /** Ensure popup starts with absolute positioning */
+    const initializePopupPosition = () => {
+      const rect = popup.getBoundingClientRect();
+
+      /** Set the popup's position only once to avoid unnecessary recalculations */
+      if (getComputedStyle(popup).position !== "absolute") {
+        popup.style.position = "absolute";
+        popup.style.left = `${rect.left + window.scrollX}px`;
+        popup.style.top = `${rect.top + window.scrollY - adminBarHeight}px`; /** Account for admin bar height */
+      }
+    };
+
+    /** Initialize the popup's position on load */
+    initializePopupPosition();
+
+    /** Mouse down to start dragging */
+    popup.addEventListener("mousedown", (e) => {
+      if (
+        e.target.id === "close-popup" ||
+        e.target.tagName === "BUTTON" ||
+        e.target.id === "new-class-input" ||
+        e.target.tagName === "INPUT"
+      ) {
+        return; /** Avoid dragging from buttons or inputs */
+      }
+      isDragging = true;
+
+      /** Get mouse starting position */
+      startX = e.clientX;
+      startY = e.clientY;
+
+      /** Get popup's current position */
+      const rect = popup.getBoundingClientRect();
+      popupStartX = rect.left;
+      popupStartY = rect.top - adminBarHeight; /** Adjust for admin bar height */
+
+      popup.style.cursor = "grabbing"; /** Change cursor to indicate dragging */
+      e.preventDefault(); /** Prevent text selection or other default behaviors */
+    });
+
+    /** Mouse move to handle dragging */
+    document.addEventListener("mousemove", (e) => {
+      if (!isDragging) return;
+
+      /** Calculate the distance moved by the mouse */
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+
+      /** Update popup position */
+      const x = popupStartX + deltaX;
+      const y = popupStartY + deltaY;
+
+      popup.style.left = `${x}px`;
+      popup.style.top = `${y}px`;
+    });
+
+    /** Mouse up to stop dragging */
+    document.addEventListener("mouseup", () => {
+      if (isDragging) {
+        isDragging = false;
+        popup.style.cursor = "grab"; /** Reset cursor */
+      }
+    });
+  });
+</script>
+<!-- END DRAG AND DROP FUNCTIONALITY (OPTIONAL ADDON) -->
+<!-- ===============================================  -->
+<!-- ===============================================  -->
+
+</div>
